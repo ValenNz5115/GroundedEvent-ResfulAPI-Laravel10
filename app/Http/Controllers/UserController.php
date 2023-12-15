@@ -3,74 +3,118 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\user;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
+
+
+use JWTAuth;
+use Tymon\JWTAuth\Exceptions\TokenExpiredException;
+use Tymon\JWTAuth\Exceptions\TokenInvalidException;
+use Tymon\JWTAuth\Exceptions\JWTException;
 
 class UserController extends Controller
 {
 
     public function register(Request $req)
     {
-
         $validator = Validator::make($req->all(), [
-            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6',
-            'role' => 'required'
+            'password' => 'required|string|min:8',
+            'role' => 'required|in:admin,officer', // Check if the role is either 'admin' or 'officer'
         ], [
-                'name.required' => 'Nama Pegawai Dibutuhkan !',
-                'eamil.required' => 'Email Pegawai Dibutuhkan !',
-                'email.string' => 'Email Berupa Huruf / Angka !',
-                'email.email' => 'Format Email Harus Sesuai !',
-                'email.unique' => 'Email Sudah Digunakan !',
-                'password.required' => 'Password Pegawai Dibutuhkan !',
-                'password.string' => 'Password Berupa Huruf / Angka !',
-                'password.min' => 'Password Minimal 6 Karakter !',
-            ]);
+            'username.required' => 'Username is required!',
+            'email.required' => 'Email is required!',
+            'email.string' => 'Email is a letter/number!',
+            'email.email' => 'Email format must match!',
+            'email.unique' => 'Email already in use!',
+            'password.required' => 'Password is required!',
+            'password.string' => 'Password is a letter/number!',
+            'password.min' => 'Password is at least 8 characters!',
+            'role.required' => 'Employee role is required!',
+            'role.in' => 'The role must be admin or officer!',
+        ]);
 
         if ($validator->fails()) {
             return response()->json(['status' => 'error', 'message' => $validator->errors()->toJson()]);
         }
-        $user = User::create([
-            'name' => $req->get('name'),
-            'email' => $req->get('email'),
-            'password' => Hash::make($req->get('password')),
-            'role' => $req->get('role'),
-        ]);
-        if ($user) {
-            return response()->json(['status' => 'success', 'message' => 'Sukses Tambah Pegawai',]);
-        } else {
-            return response()->json(['status' => 'error', 'message' => 'Gagal Tambah Pegawai',]);
+
+        try {
+            $user = User::create([
+                'username' => $req->input('username'),
+                'email' => $req->input('email'),
+                'password' => Hash::make($req->input('password')),
+                'role' => $req->input('role'),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'message' => 'Successfully updated a new user',
+                    'data' => $user
+                ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Failed to add a new user', 'error' => $e->getMessage()]);
         }
     }
 
-    public function login(req $req)
+
+    public function login(Request $request)
     {
-        $credentials = $req->only('email', 'password');
+        $credentials = $request->only('email', 'password');
+
         try {
-            if (!$token = JWTAuth::attempt($credentials)) {
-                return response()->json(['status' => 'error', 'message' => 'Email / Password Salah'], );
+            if (!Auth::attempt($credentials)) {
+                return response()->json(['status' => 'error', 'message' => 'Invalid email or password'], 401);
             }
+
+            $user = Auth::user();
+            $token = JWTAuth::fromUser($user);
         } catch (JWTException $e) {
-            return response()->json(['status' => 'error', 'message' => 'could_not_create_token']);
+            return response()->json(['status' => 'error', 'message' => 'Could not create token'], 500);
         }
-        return response()->json(['status' => 'success', 'message' => 'Sukses Login', 'token' => $token]);
+
+        return response()->json(['status' => 'success', 'message' => 'Login successful', 'token' => $token, 'user' => $user]);
     }
 
     public function getAuthenticatedUser()
     {
         try {
-            if (!$user = JWTAuth::parseToken()->authenticate()) {
-                return \Response::json(['status' => 'error', 'message' => 'user_not_found']);
+            $user = JWTAuth::parseToken()->authenticate();
+
+            if (!$user) {
+                return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
             }
-        } catch (Tymon\JWTAuth\Exceptions\TokenExpiredException $e) {
-            return \Response::json(['status' => 'error', 'message' => 'token_expired']);
-        } catch (Tymon\JWTAuth\Exceptions\TokenInvalidException $e) {
-            return \Response::json(['status' => 'error', 'message' => 'token_invalid']);
-        } catch (Tymon\JWTAuth\Exceptions\JWTException $e) {
-            return \Response::json(['status' => 'error', 'message' => 'token_absent'], );
+
+        } catch (TokenExpiredException $e) {
+            return response()->json(['status' => 'error', 'message' => 'Token expired'], $e->getStatusCode());
+
+        } catch (TokenInvalidException $e) {
+            return response()->json(['status' => 'error', 'message' => 'Token invalid'], $e->getStatusCode());
+
+        } catch (JWTException $e) {
+            return response()->json(['status' => 'error', 'message' => 'Token absent'], $e->getStatusCode());
         }
-        return \Response::json(['status' => 'success', 'user' => $user]);
+
+        return response()->json(['status' => 'success', 'data' => ['user' => $user]]);
     }
 
+    public function logout()
+    {
+        try {
+            // Invalidate the current token
+            JWTAuth::invalidate(JWTAuth::getToken());
+
+            // Log the user out of the application
+            Auth::logout();
+
+            return response()->json(['status' => 'success', 'message' => 'Logout successful']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Failed to logout', 'error' => $e->getMessage()]);
+        }
+    }
 
 
 }

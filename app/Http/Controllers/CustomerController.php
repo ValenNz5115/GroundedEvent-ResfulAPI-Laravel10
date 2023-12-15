@@ -7,87 +7,143 @@ use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class CustomerController extends Controller
 {
-    public function createCustomer(Request $req)
+    public function redirect()
 {
-    $validator = Validator::make($req->all(), [
-        'username' => 'required',
-        'email' => 'required|email|unique:customers,email',
-        'password' => 'required',
-        'phone' => 'required',
-        'ttl' => 'required|date_format:Y-m-d',
-        'city' => 'required',
-        'company' => 'required',
-        'gender' => 'required|in:male,female',
-        'image' => 'required|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
-    ], [
-        'username.required' => 'Username is required',
-        'email.required' => 'Email is required',
-        'email.email' => 'Invalid email format',
-        'email.unique' => 'Email is already taken',
-        'password.required' => 'Password is required',
-        'phone.required' => 'Phone is required',
-        'ttl.required' => 'Start date is required',
-        'ttl.date_format' => 'Start date must be in the format Y-m-d',
-        'city.required' => 'City is required',
-        'company.required' => 'Company is required',
-        'gender.required' => 'Gender is required',
-        'gender.in' => 'Invalid gender value',
-        'image.required' => 'Image is required',
-        'image.image' => 'The file must be an image.',
-        'image.mimes' => 'The image must be a file of type: jpg, png, jpeg, gif, svg.',
-        'image.max' => 'The image may not be greater than 2048 kilobytes.',
-    ]);
+    return Socialite::driver('google')->stateless()->redirect();
+}
 
-    if ($validator->fails()) {
-        return response()->json(['status' => 'error', 'message' => $validator->errors()->toJson()], 400);
-    }
-
+public function callbackGoogle()
+{
     try {
-        $imagePath = null;
+        $google_customer = Socialite::driver('google')->stateless()->user();
+        $customer = Customer::where('google_id', $google_customer->getId())->first();
 
-        if ($req->hasFile('image')) {
-            $file = $req->file('image');
-            $name = time() . '.' . $file->getClientOriginalExtension();
-            $imagePath = $file->storeAs('public/image/customers', $name);
+        if (!$customer) {
+            $new_customer = Customer::create([
+                'name' => $google_customer->getName(),
+                'email' => $google_customer->getEmail(),
+                'google_id' => $google_customer->getId(),
+            ]);
+            $customer = $new_customer;
         }
 
-        $customer = Customer::create([
-            'username' => $req->input('username'),
-            'email' => $req->input('email'),
-            'password' => bcrypt($req->input('password')),
-            'phone' => $req->input('phone'),
-            'ttl' => $req->input('ttl'),
-            'city' => $req->input('city'),
-            'company' => $req->input('company'),
-            'gender' => $req->input('gender'),
-            'image' => $imagePath,
-        ]);
+        Auth::login($customer);
+
+        // Jika Anda ingin memberikan token JWT sebagai respons API
+        $token = $customer->createToken('authToken')->accessToken;
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Successfully added a new customer',
-            'data' => $customer
-        ], 201);
-
-    } catch (\Exception $e) {
+            'message' => 'Login successful',
+            'user' => $customer,
+            'access_token' => $token,
+        ]);
+    } catch (\Throwable $th) {
         return response()->json([
             'status' => 'error',
-            'message' => 'An error occurred while processing your request',
-            'error' => $e->getMessage(),
+            'message' => 'Something went wrong: ' . $th->getMessage(),
         ], 500);
     }
 }
+    public function logout()
+    {
+        try {
+            // Invalidate the current token
+            JWTAuth::invalidate(JWTAuth::getToken());
+
+            // Log the user out of the application
+            Auth::logout();
+
+            return response()->json(['status' => 'success', 'message' => 'Logout successful']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Failed to logout', 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function createCustomer(Request $req)
+    {
+        $validator = Validator::make($req->all(), [
+            'name' => 'required',
+            'email' => 'required|email|unique:customers,email',
+            'password' => 'required',
+            'phone' => 'required',
+            'ttl' => 'required|date_format:Y-m-d',
+            'city' => 'required',
+            'company' => 'required',
+            'gender' => 'required|in:male,female',
+            'image' => 'required|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+        ], [
+            'name.required' => 'name is required',
+            'email.required' => 'Email is required',
+            'email.email' => 'Invalid email format',
+            'email.unique' => 'Email is already taken',
+            'password.required' => 'Password is required',
+            'phone.required' => 'Phone is required',
+            'ttl.required' => 'Start date is required',
+            'ttl.date_format' => 'Start date must be in the format Y-m-d',
+            'city.required' => 'City is required',
+            'company.required' => 'Company is required',
+            'gender.required' => 'Gender is required',
+            'gender.in' => 'Invalid gender value',
+            'image.required' => 'Image is required',
+            'image.image' => 'The file must be an image.',
+            'image.mimes' => 'The image must be a file of type: jpg, png, jpeg, gif, svg.',
+            'image.max' => 'The image may not be greater than 2048 kilobytes.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->toJson()], 400);
+        }
+
+        try {
+            $imagePath = null;
+
+            if ($req->hasFile('image')) {
+                $file = $req->file('image');
+                $name = time() . '.' . $file->getClientOriginalExtension();
+                $imagePath = $file->storeAs('public/image/customers', $name);
+            }
+
+            $customer = Customer::create([
+                'name' => $req->input('name'),
+                'email' => $req->input('email'),
+                'password' => bcrypt($req->input('password')),
+                'phone' => $req->input('phone'),
+                'ttl' => $req->input('ttl'),
+                'city' => $req->input('city'),
+                'company' => $req->input('company'),
+                'gender' => $req->input('gender'),
+                'image' => $imagePath,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Successfully added a new customer',
+                'data' => $customer
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred while processing your request',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function allCustomer(Request $req)
     {
         try {
             $query = Customer::query();
 
-            if ($req->has('username')) {
-                $query->where('username', 'like', '%' . $req->input('username') . '%');
+            if ($req->has('name')) {
+                $query->where('name', 'like', '%' . $req->input('name') . '%');
             }
 
             $sortBy = $req->input('sort_by', 'customer_id');
@@ -139,7 +195,7 @@ class CustomerController extends Controller
         }
 
         $validator = Validator::make($req->all(), [
-            'username' => 'required',
+            'name' => 'required',
             'email' => 'required|email',
             'password' => 'required',
             'phone' => 'required',
@@ -149,7 +205,7 @@ class CustomerController extends Controller
             'gender' => 'required|in:male,female',
             'image' => 'required|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
         ], [
-            'username.required' => 'Username is required',
+            'name.required' => 'name is required',
             'email.required' => 'Email is required',
             'email.email' => 'Invalid email format',
             'password.required' => 'Password is required',
@@ -186,7 +242,7 @@ class CustomerController extends Controller
             }
 
             $customer = [
-                'username' => $req->input('username'),
+                'name' => $req->input('name'),
                 'email' => $req->input('email'),
                 'password' => bcrypt($req->input('password')),
                 'phone' => $req->input('phone'),
@@ -243,7 +299,7 @@ class CustomerController extends Controller
                 'status' => 'error',
                 'message' => 'An error occurred while processing your request',
                 'error' => $e->getMessage(),
-            ], 500); 
+            ], 500);
         }
     }
 

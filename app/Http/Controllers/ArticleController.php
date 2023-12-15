@@ -69,7 +69,6 @@ class ArticleController extends Controller
         }
     }
 
-
     public function allArticle(Request $req)
     {
         try {
@@ -215,7 +214,7 @@ class ArticleController extends Controller
                 'status' => 'error',
                 'message' => 'An error occurred while processing your request',
                 'error' => $e->getMessage(),
-            ], 500); 
+            ], 500);
         }
     }
 

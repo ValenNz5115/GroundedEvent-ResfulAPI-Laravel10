@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\CustomerController;
@@ -23,6 +24,12 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post('/login', [UserController::class, 'login']);
+Route::post('/user/register', [UserController::class, 'register']);
+Route::post('/me', [UserController::class, 'getAuthenticatedUser']);
+Route::post('/logout', [UserController::class, 'logout']);
+
+Route::get('/login/google', [CustomerController::class, 'redirect'])->name('google-auth');
+Route::get('/login/google/call-back', [CustomerController::class, 'callbackGoogle']);
 
 
 
