@@ -23,13 +23,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('/login', [UserController::class, 'login']);
+//  user
+Route::post('/user/login', [UserController::class, 'login']);
 Route::post('/user/register', [UserController::class, 'register']);
-Route::post('/me', [UserController::class, 'getAuthenticatedUser']);
-Route::post('/logout', [UserController::class, 'logout']);
+Route::post('/user/me', [UserController::class, 'getAuthenticatedUser']);
+Route::post('/user/logout', [UserController::class, 'logout']);
 
+// customer
 Route::get('/login/google', [CustomerController::class, 'redirect'])->name('google-auth');
 Route::get('/login/google/call-back', [CustomerController::class, 'callbackGoogle']);
+Route::post('/logout', [CustomerController::class, 'logout']);
 
 
 

@@ -21,7 +21,7 @@ use Notifiable;
     'email',
     'password',
     'role',
-    'google_id'
+    'image'
     ];
 /**
 * The attributes that should be hidden for arrays.
